@@ -47,13 +47,21 @@ python main.py
 
 ## exe 化
 
-通常の onefile ビルド:
+推奨ビルド:
 
 ```bash
-pyinstaller --noconsole --onefile --name FuwaMoza main.py
+pyinstaller --clean FuwaMoza.spec
 ```
 
-アイコンを指定する場合:
+`FuwaMoza.spec` は exe のファイルアイコンに `assets/icon.ico` を指定し、実行時のウィンドウアイコン用に `assets/icon.png` も同梱します。
+
+PowerShell からビルドスクリプトを使う場合:
+
+```powershell
+.\build_exe.ps1
+```
+
+コマンドで直接指定する場合:
 
 ```bash
 pyinstaller --noconsole --onefile --name FuwaMoza --icon assets/icon.ico main.py

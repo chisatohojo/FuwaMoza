@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from .image_canvas import ImageCanvas
 from .image_processor import ImageLoadError, ImageProcessor
+from .resource_utils import resource_path
 
 
 APP_TITLE = "ふわもざ / FuwaMoza"
@@ -274,7 +275,7 @@ class MainWindow(QMainWindow):
         self.undo_button.setEnabled(bool(self.processor.undo_history) or self.processor.has_active_stroke)
 
     def _set_icon(self) -> None:
-        icon_path = Path(__file__).resolve().parent.parent / "assets" / "icon.png"
+        icon_path = resource_path("assets/icon.png")
         if icon_path.exists():
             self.setWindowIcon(QIcon(str(icon_path)))
             app = QApplication.instance()
