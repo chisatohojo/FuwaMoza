@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent, QIcon, QImage, QKeySequence, QShortcut
@@ -24,10 +22,18 @@ from PySide6.QtWidgets import (
 
 from .image_canvas import ImageCanvas
 from .image_processor import ImageLoadError, ImageProcessor
-from .resource_utils import resource_path
+from .resource_utils import app_icon_path
 
 
 APP_TITLE = "ふわもざ / FuwaMoza"
+EFFECT_NAMES = {
+    "mosaic": "モザイク",
+    "blur": "ぼかし",
+}
+EFFECT_DESCRIPTIONS = {
+    "mosaic": "選択部分を粗いドット状に隠します",
+    "blur": "選択部分をふわっとぼかします",
+}
 
 
 class MainWindow(QMainWindow):
@@ -49,15 +55,23 @@ class MainWindow(QMainWindow):
         self.effect_combo = QComboBox()
         self.effect_combo.addItem("モザイク", "mosaic")
         self.effect_combo.addItem("ぼかし", "blur")
+        self.effect_description_label = QLabel()
+        self.effect_description_label.setObjectName("EffectDescription")
+        self.effect_description_label.setMinimumWidth(0)
+        self.effect_description_label.setMaximumWidth(280)
+        self.effect_description_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.brush_slider, self.brush_value_label = self._make_slider(5, 200, 40, "px")
         self.strength_slider, self.strength_value_label = self._make_slider(1, 50, 16, "")
         self.brush_slider.valueChanged.connect(self.canvas.set_brush_diameter)
+        self.brush_slider.valueChanged.connect(self._show_current_tool_status)
+        self.strength_slider.valueChanged.connect(self._show_current_tool_status)
+        self.effect_combo.currentIndexChanged.connect(self._sync_effect_description)
         self.canvas.set_brush_diameter(self.brush_slider.value())
 
         self.file_label = QLabel("未読み込み")
         self.file_label.setObjectName("FileLabel")
-        self.file_label.setMinimumWidth(120)
+        self.file_label.setMinimumWidth(80)
         self.file_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
 
         self.open_button = self._make_tool_button(
@@ -89,6 +103,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._setup_shortcuts()
         self._apply_style()
+        self._sync_effect_description(update_status=False)
         self._update_actions()
         self.statusBar().showMessage("準備完了")
 
@@ -108,26 +123,34 @@ class MainWindow(QMainWindow):
         try:
             self.processor.load_image(path)
         except ImageLoadError as exc:
-            QMessageBox.warning(self, "読み込みエラー", str(exc))
+            message = str(exc)
+            self.statusBar().showMessage(f"エラー: {message}")
+            QMessageBox.warning(self, "読み込みエラー", message)
             return
         except Exception as exc:  # pragma: no cover - defensive UI guard
-            QMessageBox.critical(self, "読み込みエラー", f"予期しないエラーが発生しました。\n{exc}")
+            message = f"予期しないエラーが発生しました。\n{exc}"
+            self.statusBar().showMessage(f"エラー: {exc}")
+            QMessageBox.critical(self, "読み込みエラー", message)
             return
 
         self.dirty = False
         self._refresh_canvas()
         self._update_actions()
-        self.statusBar().showMessage(f"読み込み: {Path(path).name}")
+        self.statusBar().showMessage(self._image_status_text("読み込み完了"))
 
     def save_image(self) -> bool:
         if not self.processor.has_image:
-            QMessageBox.information(self, "保存", "画像が読み込まれていません。")
+            message = "画像が読み込まれていません。"
+            self.statusBar().showMessage(f"エラー: {message}")
+            QMessageBox.information(self, "保存", message)
             return False
 
         try:
             output_path = self.processor.save()
         except Exception as exc:  # pragma: no cover - filesystem dependent
-            QMessageBox.critical(self, "保存エラー", f"保存に失敗しました。\n{exc}")
+            message = f"保存に失敗しました。\n{exc}"
+            self.statusBar().showMessage(f"エラー: {exc}")
+            QMessageBox.critical(self, "保存エラー", message)
             return False
 
         self.dirty = False
@@ -137,18 +160,28 @@ class MainWindow(QMainWindow):
         return True
 
     def undo(self) -> None:
+        was_active_stroke = self.processor.has_active_stroke
         if self.processor.undo():
-            self.dirty = bool(self.processor.undo_history)
+            if not was_active_stroke:
+                self.dirty = bool(self.processor.undo_history)
             self._refresh_canvas()
             self._update_actions()
-            self.statusBar().showMessage("Undoしました")
+            if was_active_stroke:
+                self.canvas.cancel_stroke_preview()
+                self.statusBar().showMessage("ドラッグ操作をキャンセルしました")
+            else:
+                self.statusBar().showMessage("1つ前の操作を取り消しました")
 
     def clear(self) -> None:
+        if self.dirty and not self._confirm_continue_without_saving():
+            self.statusBar().showMessage("クリアをキャンセルしました")
+            return
+
         if self.processor.clear():
             self.dirty = False
             self._refresh_canvas()
             self._update_actions()
-            self.statusBar().showMessage("クリアしました")
+            self.statusBar().showMessage("編集内容をクリアしました")
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._confirm_before_replacing_image():
@@ -171,7 +204,7 @@ class MainWindow(QMainWindow):
         if self.processor.end_stroke():
             self.dirty = True
             self._update_actions()
-            self.statusBar().showMessage("加工しました")
+            self._show_current_tool_status()
 
     def _apply_stroke_point(self, point: tuple[int, int]) -> None:
         effect_type = self.effect_combo.currentData()
@@ -190,24 +223,18 @@ class MainWindow(QMainWindow):
         if not self.dirty:
             return True
 
+        return self._confirm_continue_without_saving()
+
+    def _confirm_continue_without_saving(self) -> bool:
         box = QMessageBox(self)
         box.setIcon(QMessageBox.Icon.Question)
         box.setWindowTitle("未保存の編集")
-        box.setText("未保存の編集があります。")
-        box.setInformativeText("保存してから続行しますか？")
-        box.setStandardButtons(
-            QMessageBox.StandardButton.Save
-            | QMessageBox.StandardButton.Discard
-            | QMessageBox.StandardButton.Cancel
-        )
-        box.setDefaultButton(QMessageBox.StandardButton.Save)
-        result = box.exec()
-
-        if result == QMessageBox.StandardButton.Save:
-            return self.save_image()
-        if result == QMessageBox.StandardButton.Discard:
-            return True
-        return False
+        box.setText("現在の編集内容は保存されていません。続行しますか？")
+        yes_button = box.addButton("はい", QMessageBox.ButtonRole.AcceptRole)
+        no_button = box.addButton("いいえ", QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(no_button)
+        box.exec()
+        return box.clickedButton() == yes_button
 
     def _build_ui(self) -> None:
         root = QWidget()
@@ -230,9 +257,8 @@ class MainWindow(QMainWindow):
         command_layout.addSpacing(8)
         command_layout.addWidget(QLabel("効果"))
         command_layout.addWidget(self.effect_combo)
-        command_layout.addSpacing(8)
-        command_layout.addWidget(QLabel("ファイル"))
-        command_layout.addWidget(self.file_label)
+        command_layout.addWidget(self.effect_description_label)
+        command_layout.addStretch(1)
 
         slider_layout = QHBoxLayout()
         slider_layout.setSpacing(8)
@@ -243,6 +269,9 @@ class MainWindow(QMainWindow):
         slider_layout.addWidget(QLabel("強さ"))
         slider_layout.addWidget(self.strength_slider)
         slider_layout.addWidget(self.strength_value_label)
+        slider_layout.addSpacing(12)
+        slider_layout.addWidget(QLabel("ファイル"))
+        slider_layout.addWidget(self.file_label)
         slider_layout.addStretch(1)
 
         toolbar_layout.addLayout(command_layout)
@@ -265,26 +294,62 @@ class MainWindow(QMainWindow):
 
     def _cancel_active_stroke(self) -> None:
         if self.processor.cancel_stroke():
+            self.canvas.cancel_stroke_preview()
             self._refresh_canvas()
+            self._update_actions()
             self.statusBar().showMessage("ドラッグ操作をキャンセルしました")
 
     def _update_actions(self) -> None:
         has_image = self.processor.has_image
         self.save_button.setEnabled(has_image)
         self.clear_button.setEnabled(has_image)
-        self.undo_button.setEnabled(bool(self.processor.undo_history) or self.processor.has_active_stroke)
+        self.undo_button.setEnabled(bool(self.processor.undo_history))
 
     def _set_icon(self) -> None:
-        icon_path = resource_path("assets/icon.png")
-        if icon_path.exists():
+        icon_path = app_icon_path()
+        if icon_path is not None:
             self.setWindowIcon(QIcon(str(icon_path)))
             app = QApplication.instance()
             if app is not None:
                 app.setWindowIcon(QIcon(str(icon_path)))
 
+    def _sync_effect_description(self, update_status: bool = True) -> None:
+        if not isinstance(update_status, bool):
+            update_status = True
+        effect_type = self.effect_combo.currentData()
+        self.effect_description_label.setText(EFFECT_DESCRIPTIONS.get(effect_type, ""))
+        if update_status:
+            self._show_current_tool_status()
+
+    def _show_current_tool_status(self, *_args) -> None:
+        if self.processor.has_image:
+            self.statusBar().showMessage(self._current_tool_status_text())
+
+    def _current_effect_name(self) -> str:
+        return EFFECT_NAMES.get(self.effect_combo.currentData(), "効果")
+
+    def _current_tool_status_text(self) -> str:
+        return (
+            f"編集中: {self._current_effect_name()} / "
+            f"太さ {self.brush_slider.value()}px / 強さ {self.strength_slider.value()}"
+        )
+
+    def _image_status_text(self, prefix: str) -> str:
+        image = self.processor.current_image
+        source_path = self.processor.source_path
+        image_format = self.processor.source_format
+        if image is None or source_path is None or image_format is None:
+            return "準備完了"
+
+        width, height = image.size
+        return f"{prefix}: {source_path.name} / {width}x{height} / {image_format}"
+
     def _apply_style(self) -> None:
         self.setStyleSheet(
             """
+            QWidget {
+                font-family: "Yu Gothic UI", "Meiryo UI", sans-serif;
+            }
             QMainWindow {
                 background: #f5f7fb;
                 color: #1f2430;
@@ -297,6 +362,10 @@ class MainWindow(QMainWindow):
                 color: #303747;
             }
             QLabel#FileLabel {
+                color: #586174;
+                padding-left: 2px;
+            }
+            QLabel#EffectDescription {
                 color: #586174;
                 padding-left: 2px;
             }
@@ -353,7 +422,7 @@ class MainWindow(QMainWindow):
         slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(minimum, maximum)
         slider.setValue(value)
-        slider.setFixedWidth(220)
+        slider.setFixedWidth(180)
 
         label = QLabel()
         label.setFixedWidth(46)

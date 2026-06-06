@@ -1,11 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
+asset_datas = []
+for icon_asset in ("assets/icon.ico", "assets/icon.png"):
+    if Path(icon_asset).exists():
+        asset_datas.append((icon_asset, "assets"))
+
+exe_icon = "assets/icon.ico" if Path("assets/icon.ico").exists() else None
+
 
 a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[("assets/icon.png", "assets")],
+    datas=asset_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -35,5 +45,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=["assets/icon.ico"],
+    icon=exe_icon,
 )
