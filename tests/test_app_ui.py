@@ -9,6 +9,7 @@ from PIL import Image
 from PySide6.QtWidgets import QApplication
 
 from src.app import MainWindow
+from src.version import app_title
 
 
 def get_app() -> QApplication:
@@ -28,6 +29,7 @@ class MainWindowUiTest(unittest.TestCase):
             Image.new("RGB", (64, 32), "white").save(source)
 
             window = MainWindow()
+            self.assertEqual(window.windowTitle(), app_title())
             self.assertFalse(window.save_button.isEnabled())
             self.assertFalse(window.undo_button.isEnabled())
             self.assertFalse(window.clear_button.isEnabled())

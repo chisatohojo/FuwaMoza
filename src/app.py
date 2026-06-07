@@ -23,9 +23,9 @@ from PySide6.QtWidgets import (
 from .image_canvas import ImageCanvas
 from .image_processor import ImageLoadError, ImageProcessor
 from .resource_utils import app_icon_path
+from .version import APP_DISPLAY_NAME, APP_VERSION, app_title
 
 
-APP_TITLE = "ふわもざ / FuwaMoza"
 EFFECT_NAMES = {
     "mosaic": "モザイク",
     "blur": "ぼかし",
@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         self.processor = ImageProcessor()
         self.dirty = False
 
-        self.setWindowTitle(APP_TITLE)
+        self.setWindowTitle(app_title())
         self.resize(1040, 720)
         self._set_icon()
 
@@ -94,11 +94,17 @@ class MainWindow(QMainWindow):
             self.style().standardIcon(QStyle.StandardPixmap.SP_DialogResetButton),
             "読み込み直後に戻す",
         )
+        self.about_button = self._make_tool_button(
+            "情報",
+            self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation),
+            "このアプリについて",
+        )
 
         self.open_button.clicked.connect(self.open_image_dialog)
         self.save_button.clicked.connect(self.save_image)
         self.undo_button.clicked.connect(self.undo)
         self.clear_button.clicked.connect(self.clear)
+        self.about_button.clicked.connect(self.show_about_dialog)
 
         self._build_ui()
         self._setup_shortcuts()
@@ -115,6 +121,22 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getOpenFileName(self, "画像を開く", "", filter_text)
         if path:
             self.load_image(path, confirm=False)
+
+    def show_about_dialog(self) -> None:
+        QMessageBox.about(
+            self,
+            f"{APP_DISPLAY_NAME} について",
+            "\n".join(
+                [
+                    f"アプリ名: {APP_DISPLAY_NAME}",
+                    f"バージョン: v{APP_VERSION}",
+                    "",
+                    "概要: 画像の一部にモザイクやぼかしを追加できる軽量ツール",
+                    "出力仕様: 元画像と同じサイズ・同じ形式で保存",
+                    "注意: 元画像は上書きせず、_fuwamoza 付きで保存します",
+                ]
+            ),
+        )
 
     def load_image(self, path: str, confirm: bool = True) -> None:
         if confirm and not self._confirm_before_replacing_image():
@@ -254,6 +276,7 @@ class MainWindow(QMainWindow):
         command_layout.addWidget(self.save_button)
         command_layout.addWidget(self.undo_button)
         command_layout.addWidget(self.clear_button)
+        command_layout.addWidget(self.about_button)
         command_layout.addSpacing(8)
         command_layout.addWidget(QLabel("効果"))
         command_layout.addWidget(self.effect_combo)

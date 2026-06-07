@@ -1,0 +1,40 @@
+FuwaMoza Build Guide
+====================
+
+対象
+----
+Windows 向けのポータブル版 FuwaMoza.exe と配布 zip を作成する手順です。
+
+仮想環境作成
+------------
+python -m venv .venv
+.venv\Scripts\activate
+
+依存関係インストール
+--------------------
+pip install -r requirements.txt
+
+テスト
+------
+python -m unittest discover
+
+PyInstaller で exe 化
+---------------------
+推奨:
+pyinstaller --clean FuwaMoza.spec
+
+アイコン付きで直接ビルドする場合:
+pyinstaller --noconsole --onefile --name FuwaMoza --icon assets/icon.ico main.py
+
+アイコンがない場合:
+pyinstaller --noconsole --onefile --name FuwaMoza main.py
+
+配布 zip 作成
+-------------
+python make_release.py
+
+出力先
+------
+dist\FuwaMoza.exe
+release\FuwaMoza_v0.1.0.zip
+release\checksums.txt

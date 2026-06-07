@@ -2,6 +2,8 @@
 
 ふわもざは、画像の任意の場所にモザイクまたはぼかしをブラシ感覚で追加できる Windows 向けの軽量画像加工アプリです。スクリーンショットや写真に写った個人情報、顔、ナンバープレート、不要な文字などをすばやく隠せます。
 
+現在のバージョンは `v0.1.0` です。アプリ内の「情報」ボタンからも確認できます。
+
 ## 必要環境
 
 - Windows
@@ -68,6 +70,22 @@ PowerShell からビルドスクリプトを使う場合:
 pyinstaller --noconsole --onefile --name FuwaMoza --icon assets/icon.ico main.py
 ```
 
+## 配布 zip
+
+`dist/FuwaMoza.exe` を作成したあと、以下で配布用 zip を作成できます。
+
+```bash
+python make_release.py
+```
+
+出力例:
+
+- `release/FuwaMoza_v0.1.0/`
+- `release/FuwaMoza_v0.1.0.zip`
+- `release/checksums.txt`
+
+配布 zip には `FuwaMoza.exe`, `README.txt`, `CHANGELOG.txt`, `LICENSE.txt`, `BUILD.txt` が入ります。
+
 ## アイコン設定
 
 アプリのアイコンを差し替える場合は、`assets` フォルダ内のファイルを置き換えてください。
@@ -76,6 +94,14 @@ pyinstaller --noconsole --onefile --name FuwaMoza --icon assets/icon.ico main.py
 - `assets/icon.png`: `icon.ico` がない場合のウィンドウアイコンとして使用されます。
 
 `assets` フォルダがない場合は作成し、同じファイル名で配置してください。exe 化するときは、推奨の `pyinstaller --clean FuwaMoza.spec` を使うとアイコン素材も同梱されます。
+
+## 使用ライブラリ
+
+- PySide6
+- Pillow
+- PyInstaller
+
+各ライブラリの利用条件は、それぞれのライセンスに従います。
 
 ## 注意事項
 

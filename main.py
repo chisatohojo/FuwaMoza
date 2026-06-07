@@ -5,11 +5,13 @@ from PySide6.QtWidgets import QApplication
 
 from src.app import MainWindow
 from src.resource_utils import app_icon_path
+from src.version import APP_NAME, APP_VERSION
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("FuwaMoza")
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(APP_VERSION)
     app.setOrganizationName("FuwaMoza")
 
     icon_path = app_icon_path()
